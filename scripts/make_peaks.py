@@ -31,9 +31,16 @@ from icsad.scoring import normalize
 from icsad.utils import stdout_utf8
 
 
-def pick_peaks(s: np.ndarray, n: int, width: int, suppress: int) -> list[tuple[int, int]]:
+def pick_peaks(s: np.ndarray, n: int, width: int, suppress: int, offset: int | None = None) -> list[tuple[int, int]]:
+    """Chọn n đỉnh cao nhất, mỗi đỉnh thành một cửa sổ rộng `width`.
+
+    `offset` là vị trí của đỉnh trong cửa sổ tính từ đầu (mặc định giữa). Đỉnh
+    điểm bất thường thường rơi vào lúc tấn công *bắt đầu* (lúc quan hệ vừa gãy),
+    nên đặt đỉnh lệch về đầu cửa sổ có thể khiến cửa sổ nằm trong tấn công nhiều
+    hơn - mà eTaPR đòi >= 50%% nằm trong.
+    """
     work = s.copy()
-    half = width // 2
+    half = width // 2 if offset is None else offset
     out: list[tuple[int, int]] = []
     for _ in range(n):
         p = int(np.argmax(work))
@@ -65,6 +72,8 @@ def main() -> None:
     ap.add_argument("--smooth", type=int, default=60)
     ap.add_argument("--n", type=int, default=12)
     ap.add_argument("--width", type=int, default=240)
+    ap.add_argument("--offset", type=int, default=None,
+                    help="vị trí đỉnh trong cửa sổ tính từ đầu (mặc định: giữa)")
     ap.add_argument("--suppress", type=int, default=None,
                     help="bán kính triệt tiêu quanh mỗi đỉnh (mặc định = width // 2)")
     ap.add_argument("--out", default="submissions/peaks.csv")
@@ -75,7 +84,7 @@ def main() -> None:
     paths = [out_dir / f"res_{m}_{args.dataset}.npy" for m in args.models]
     s = smooth(build_score(paths, args.norm, args.topk, (60, 300), args.fuse), args.smooth)
 
-    ranges = pick_peaks(s, args.n, args.width, args.suppress or max(args.width // 2, 30))
+    ranges = pick_peaks(s, args.n, args.width, args.suppress or max(args.width // 2, 30), args.offset)
     labels = np.zeros(len(s), dtype=np.int8)
     for a, b in ranges:
         labels[a : b + 1] = 1

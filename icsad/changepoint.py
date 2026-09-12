@@ -66,3 +66,35 @@ def multi_scale_change_scores(
         s = change_scores(X, window=w, baseline=int(w * baseline_ratio), floor=floor)
         out = s if out is None else np.maximum(out, s)
     return out
+
+
+def pulse_scores(
+    X: np.ndarray,
+    scales: tuple[int, ...] = (60, 120, 240, 480, 900),
+    floor: float = 3e-3,
+) -> np.ndarray:
+    """Điểm "xung chữ nhật": giá trị bị đổi rồi **trả lại như cũ**.
+
+    Đây là chữ ký đặc trưng nhất của một cuộc tấn công ICS: kẻ tấn công ghi một
+    giá trị khác vào setpoint/lệnh điều khiển, giữ vài phút, rồi khôi phục. Thao
+    tác vận hành bình thường thì ngược lại - đổi xong là giữ nguyên, nên "trước"
+    và "sau" khác nhau.
+
+    Với mỗi thang thời gian L, xét ba cửa sổ liền nhau [t-L, t), [t, t+L),
+    [t+L, t+2L) và tính
+
+        (min(|giữa - trước|, |giữa - sau|) - |trước - sau|) / độ_lệch_nền
+
+    Số hạng trừ |trước - sau| chính là phần loại bỏ các thay đổi một chiều.
+    """
+    n, F = X.shape
+    best = np.zeros((n, F), dtype=np.float32)
+    for L in scales:
+        mid = _rolling_mean(X, L, 0)
+        before = _rolling_mean(X, L, -L)
+        after = _rolling_mean(X, L, L)
+        scale = np.maximum(_rolling_std(X, 8 * L, -4 * L), floor)
+        step = np.abs(before - after)
+        pulse = (np.minimum(np.abs(mid - before), np.abs(mid - after)) - step) / scale
+        np.maximum(best, np.maximum(pulse, 0.0), out=best)
+    return best
