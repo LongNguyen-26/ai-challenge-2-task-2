@@ -111,6 +111,9 @@ yếu tố) cho kết quả:
 | Quét độ rộng (n=8) | 8 | 300 / 180 / 120 s | | 25,7 / **37,9** / 36,5 |
 | Quét số đoạn (rộng 180 s) | 8 / 12 / 16 | 180 s | | 37,9 / **39,2** / 31,9 |
 | Dịch cả 12 đoạn ±60 s | 12 | 180 s | 2,2% | −60 s: 28,8 · **0: 39,2** · +60 s: 19,2 |
+| Xếp hạng theo đồng thuận 3 mô hình | 12 | 180 s | 2,4% | 38,10 |
+| Độ rộng thích nghi 120–220 s | 12 | 120–220 s | 2,4% | 30,44 |
+| Bỏ cụm công tắc chế độ P2 khỏi điểm | 12 | 180 s | 2,3% | 38,59 |
 
 Ba kết luận:
 
@@ -143,7 +146,17 @@ tắc chế độ P2 (`P2_MASW`, `P2_ManualGO`, `P2_AutoGO`, …) ra khỏi vi�
 hiệu nhị phân này đổi cùng lúc mỗi khi người trực chuyển auto/manual, mô hình nào cũng
 coi là hiếm gặp nên hay báo động giả ở đó.
 
-## 5. Cấu trúc mã nguồn
+## 5. Tài liệu
+
+| Tệp | Nội dung |
+|---|---|
+| [`docs/01_cach_tiep_can.md`](docs/01_cach_tiep_can.md) | Toàn bộ lập luận dưới góc nhìn một thí sinh: đọc đề, vì sao phải hiểu metric trước, các bẫy dữ liệu, vì sao mô hình tuyến tính thắng DL, cách dùng bảng xếp hạng làm dụng cụ đo, và bản kế hoạch 6 giờ nếu làm lại |
+| [`docs/02_kien_thuc_nen.md`](docs/02_kien_thuc_nen.md) | Kiến thức nền: hệ ICS và bộ HAI, quy ước đặt tên tín hiệu, các họ mô hình phát hiện bất thường và độ phù hợp, kỹ thuật tiền xử lý, chuẩn hoá/đặt ngưỡng, họ metric (point-adjust, TaPR, eTaPR, affiliation) |
+| [`docs/03_nhat_ky_phien_va_ke_hoach.md`](docs/03_nhat_ky_phien_va_ke_hoach.md) | Nhật ký 17 lần nộp, tách bạch *sự thật đã đo* với *giả thuyết chưa kiểm chứng*, và kế hoạch dùng 20 lượt nộp tiếp theo |
+| [`notebooks/olympiad_solution.ipynb`](notebooks/olympiad_solution.ipynb) | **Bài giải đầy đủ**: chạy tuần tự từ đọc dữ liệu tới `predictions.csv` đạt 39,18 điểm (đã kiểm chứng tái lập đúng từng byte) |
+| [`notebooks/colab_train.ipynb`](notebooks/colab_train.ipynb) | Bản huấn luyện trên GPU Colab (mount Drive, clone repo, train, xuất kết quả) |
+
+## 6. Cấu trúc mã nguồn
 
 ```
 icsad/                 thư viện
@@ -173,12 +186,15 @@ scripts/
   plot_scores.py       vẽ điểm + liệt kê đoạn dự đoán kèm tín hiệu đóng góp
 configs/               tham số hậu xử lý đã chọn (dùng lại được, khỏi dò lại)
 submissions/           tệp nộp bài đã sinh
-notebooks/colab_train.ipynb   bản chạy trên GPU Colab
-tools/build_notebook.py       sinh lại notebook từ mã nguồn
+notebooks/
+  olympiad_solution.ipynb     bài giải đầy đủ, chạy ra predictions.csv 39,18 điểm
+  colab_train.ipynb           bản huấn luyện trên GPU Colab
+docs/                  tài liệu cách tiếp cận, kiến thức nền, nhật ký thi
+tools/                 script sinh lại các notebook từ mã nguồn
 tests/                 kiểm thử nhanh (eTaPR, hậu xử lý, dữ liệu)
 ```
 
-## 6. Chạy trên máy cá nhân
+## 7. Chạy trên máy cá nhân
 
 ```bash
 pip install -r requirements.txt
@@ -219,13 +235,13 @@ python scripts/score_tcn.py --dataset public_test --device cuda
 **Khi có `private_test.zip`**: chép vào `release/` rồi đổi `--dataset private_test` — không cần
 huấn luyện lại.
 
-## 7. Chạy trên Colab
+## 8. Chạy trên Colab
 
 Mở `notebooks/colab_train.ipynb` (Runtime → T4 GPU). Notebook tự mount Drive, dò `training.zip`
 trong Drive, clone repo này, huấn luyện cả hai mô hình, chọn ngưỡng và xuất `predictions.csv`
 về lại Drive.
 
-## 8. Ghi chú về dữ liệu
+## 9. Ghi chú về dữ liệu
 
 `release/*.zip` **không được đẩy lên GitHub** (xem `.gitignore`); dữ liệu nằm sẵn trong Google
 Drive. Mọi kết quả trung gian (`outputs/`, `data/`) cũng bị bỏ qua.

@@ -22,3 +22,5 @@ GEO_n12 -> 38.10297
 S_n12_var2 -> 30.43804	
 
 FINAL_n12 -> 38.59209
+
+Đừng nghe theo lời khuyên từ đề mà tự suy luận
