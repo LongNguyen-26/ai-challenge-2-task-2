@@ -68,7 +68,35 @@ residual bị thổi phồng một cách hệ thống (đo trên train sạch: 6
 mức nền). `icsad/features.py` đã đệm phản chiếu (reflect) và `scoring.boundary_guard` còn dập
 thêm phần rìa còn lại — nếu không sẽ luôn có một "đoạn tấn công ma" ở đầu tệp test.
 
-## 3. Cấu trúc mã nguồn
+## 3. Kết quả
+
+eTaPR F1 trên **6 lần tiêm tấn công giả lập khác nhau** vào `train6.csv` (50 tấn công/lần,
+θp = 0.5, θr = 0.1) — đây là thước đo *tương đối* để so các phương án, không phải ước lượng
+điểm thi:
+
+| Phương án | chuẩn hoá | F1 (6 seed) | eTaP | eTaR | Public test |
+|---|---|---|---|---|---|
+| Quan hệ tuyến tính | rank, top-3 | 0.462 ± 0.02 | 0.58 | 0.39 | 16 đoạn, 5,5% số điểm |
+| TCN | rank, top-3 | 0.277 | 0.26 | 0.34 | 48 đoạn, 8,1% |
+| **Ghép cả hai** (trung bình z theo từng tín hiệu, top-1) | rank, top-1 | **0.486 ± 0.06** | 0.48 | 0.49 | **23 đoạn, 4,55%** |
+
+Phương án nộp bài là phương án ghép: `configs/post_params_ensemble.json`
+(làm trơn 15 s, ngưỡng 5,0, đoạn tối thiểu 60 s, ghép khe hở ≤ 60 s). Bản chỉ dùng mô hình
+tuyến tính (`configs/post_params_relation.json`) chạy được hoàn toàn trên CPU trong ~10 phút
+và chỉ kém khoảng 0,02 F1 — dùng làm phương án dự phòng.
+
+Các đoạn mà mô hình chỉ ra trên public test đều bám vào những tín hiệu có ý nghĩa vật lý
+(van mức `P1_LCV01D` + mức bồn `P1_LIT01`, setpoint áp suất `P1_B2016` + `P1_PIT01`,
+`P1_FCV03D` + lưu lượng `P1_FT03`, cụm P3 `P3_FIT01`/`P3_LCV01D`…) chứ không phải nhiễu rải rác
+— xem `outputs/score_public_test.png` và bảng in ra bởi `scripts/plot_scores.py`.
+
+> **Một lỗi đáng ghi lại**: bản TCN đầu tiên dùng `GroupNorm`, mà GroupNorm chuẩn hoá dọc theo
+> trục thời gian. Mạng huấn luyện với cửa sổ 512 điểm nhưng khi chấm điểm lại chạy trên cả chuỗi
+> 32 000 điểm nên thống kê chuẩn hoá khác hẳn: |residual| trung bình 0,196 thay vì 0,074, và F1
+> rơi xuống 0,13. Thay bằng `ChannelNorm` (chuẩn hoá trên trục kênh tại từng thời điểm, không
+> phụ thuộc độ dài chuỗi) thì hết.
+
+## 4. Cấu trúc mã nguồn
 
 ```
 icsad/                 thư viện
@@ -90,11 +118,15 @@ scripts/
   tune_postprocess.py  chọn chuẩn hoá + ngưỡng + hậu xử lý
   make_submission.py   xuất predictions.csv
   run_all.py           chạy tuần tự toàn bộ
+  plot_scores.py       vẽ điểm + liệt kê đoạn dự đoán kèm tín hiệu đóng góp
+configs/               tham số hậu xử lý đã chọn (dùng lại được, khỏi dò lại)
+submissions/           tệp nộp bài đã sinh
 notebooks/colab_train.ipynb   bản chạy trên GPU Colab
+tools/build_notebook.py       sinh lại notebook từ mã nguồn
 tests/                 kiểm thử nhanh (eTaPR, hậu xử lý, dữ liệu)
 ```
 
-## 4. Chạy trên máy cá nhân
+## 5. Chạy trên máy cá nhân
 
 ```bash
 pip install -r requirements.txt
@@ -135,13 +167,13 @@ python scripts/score_tcn.py --dataset public_test --device cuda
 **Khi có `private_test.zip`**: chép vào `release/` rồi đổi `--dataset private_test` — không cần
 huấn luyện lại.
 
-## 5. Chạy trên Colab
+## 6. Chạy trên Colab
 
 Mở `notebooks/colab_train.ipynb` (Runtime → T4 GPU). Notebook tự mount Drive, dò `training.zip`
 trong Drive, clone repo này, huấn luyện cả hai mô hình, chọn ngưỡng và xuất `predictions.csv`
 về lại Drive.
 
-## 6. Ghi chú về dữ liệu
+## 7. Ghi chú về dữ liệu
 
 `release/*.zip` **không được đẩy lên GitHub** (xem `.gitignore`); dữ liệu nằm sẵn trong Google
 Drive. Mọi kết quả trung gian (`outputs/`, `data/`) cũng bị bỏ qua.

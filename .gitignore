@@ -9,6 +9,7 @@ outputs/
 *.pth
 *.ckpt
 predictions*.csv
+!submissions/*.csv
 
 # --- python ---
 __pycache__/

@@ -1,0 +1,29 @@
+{
+  "norm": "rank",
+  "topk": 3,
+  "fuse": "feature_mean",
+  "guard_zero": 60,
+  "guard_ramp": 300,
+  "post": {
+    "smooth_window": 15,
+    "smooth_kind": "mean",
+    "th_hi": 5.5,
+    "th_lo_ratio": 1.0,
+    "min_len": 60,
+    "max_gap": 180,
+    "max_len": 0
+  },
+  "val_f1": 0.4624,
+  "note": "chon tren 6 seed tan cong gia lap, chi mo hinh quan he tuyen tinh",
+  "residual_patterns": [
+    "outputs/res_relation_synth_seed{seed}.npy"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

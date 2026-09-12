@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from icsad.data import Scaler
 from icsad.etapr import labels_to_ranges
 from icsad.pipeline import build_score
+from icsad.postprocess import smooth
 from icsad.scoring import normalize
 from icsad.tune import PostParams
 from icsad.utils import load_json, stdout_utf8
@@ -57,8 +58,11 @@ def main() -> None:
               + ", ".join(f"{names[i]}={Z[a:b+1, i].mean():.1f}" for i in top))
 
     t = np.arange(len(score)) / 3600.0
+    smoothed = smooth(score, params.smooth_window, params.smooth_kind)
     fig, ax = plt.subplots(figsize=(16, 4.5))
-    ax.plot(t, score, lw=0.6, color="C0", label="điểm bất thường")
+    ax.plot(t, score, lw=0.4, color="0.75", label="điểm thô")
+    ax.plot(t, smoothed, lw=0.7, color="C0",
+            label=f"đã làm trơn {params.smooth_window}s (dùng để cắt ngưỡng)")
     ax.axhline(params.th_hi, color="r", ls="--", lw=0.8, label=f"ngưỡng {params.th_hi:g}")
     for a, b in ranges:
         ax.axvspan(a / 3600, b / 3600, color="red", alpha=0.15, lw=0)
