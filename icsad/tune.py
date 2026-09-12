@@ -62,11 +62,15 @@ def grid_search(
     theta_r: float = 0.1,
     top_k: int = 10,
     verbose: bool = True,
+    stable_threshold: bool = True,
 ) -> tuple[PostParams, list[tuple[float, PostParams, dict]]]:
     """Duyệt lưới tham số, trả về (bộ tốt nhất, top_k kết quả).
 
     Args:
         pairs: danh sách (score, y_true) - mỗi phần tử là một chuỗi kiểm định.
+        stable_threshold: xếp hạng theo F1 trung bình của ngưỡng đó và hai ngưỡng
+            kề bên thay vì F1 đơn lẻ. Tránh chọn đúng một điểm may mắn nằm ngay
+            mép vực - trên tập test thật ngưỡng sẽ lệch đi một chút.
     """
     g = {**DEFAULT_GRID, **(grid or {})}
     results: list[tuple[float, PostParams, dict]] = []
@@ -107,6 +111,7 @@ def grid_search(
                     }
                     results.append((mean_f1, params, info))
 
+    results = _prefer_stable_threshold(results, g["th_hi"]) if stable_threshold else results
     results.sort(key=lambda r: -r[0])
     if verbose:
         print(f"  đã thử {len(results)} bộ tham số")
@@ -129,3 +134,28 @@ def evaluate_params(params: PostParams, pairs: Sequence[tuple[np.ndarray, np.nda
         "eTaR": float(np.mean([o["eTaR"] for o in out])),
         "detail": out,
     }
+
+
+def _prefer_stable_threshold(
+    results: list[tuple[float, PostParams, dict]],
+    th_grid: Sequence[float],
+) -> list[tuple[float, PostParams, dict]]:
+    """Thay F1 bằng trung bình F1 của ngưỡng đó với hai ngưỡng kề bên.
+
+    Giữ nguyên thông tin gốc trong `info['f1_raw']`.
+    """
+    th_index = {th: i for i, th in enumerate(th_grid)}
+    by_key: dict[tuple, dict[int, float]] = {}
+    for f1, p, _ in results:
+        key = (p.smooth_window, p.smooth_kind, p.th_lo_ratio, p.min_len, p.max_gap, p.max_len)
+        by_key.setdefault(key, {})[th_index[p.th_hi]] = f1
+
+    out = []
+    for f1, p, info in results:
+        key = (p.smooth_window, p.smooth_kind, p.th_lo_ratio, p.min_len, p.max_gap, p.max_len)
+        i = th_index[p.th_hi]
+        neigh = [by_key[key].get(j) for j in (i - 1, i, i + 1)]
+        vals = [v for v in neigh if v is not None]
+        info = {**info, "f1_raw": round(f1, 4), "f1_neighbours": [round(v, 4) for v in vals]}
+        out.append((float(np.mean(vals)), p, info))
+    return out

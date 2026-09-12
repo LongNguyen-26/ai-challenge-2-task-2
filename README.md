@@ -51,6 +51,10 @@ mà dữ liệu gần như không đổi (không thể phát hiện được, gi
 tham số và chấm bằng **chính metric eTaPR** (`icsad/etapr.py`, đã đối chiếu khớp tới 5e-16 với mã
 nguồn gốc của tác giả metric).
 
+Khi chọn, bộ tham số được xếp hạng theo **F1 trung bình của ngưỡng đó và hai ngưỡng kề bên**
+chứ không phải F1 đơn lẻ — tránh việc bám vào đúng một điểm may mắn nằm ngay mép vực, vì trên
+dữ liệu thi thật ngưỡng chắc chắn lệch đi ít nhiều.
+
 Vài hệ quả của eTaPR đã được dùng để định hướng hậu xử lý:
 * mỗi đoạn dự đoán phải nằm **≥ 50%** bên trong tấn công, nếu không nó bị loại và trở thành báo
   động giả → **không được kéo đoạn dài lê thê**;
