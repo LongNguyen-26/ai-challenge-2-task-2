@@ -13,6 +13,14 @@ kiểu can thiệp hay gặp trong ICS:
     replay   : phát lại một đoạn khác của chính tín hiệu đó
     noise    : thêm nhiễu
 
+Một nửa số tấn công được sinh ở dạng **quá độ hai đầu** (`transient_prob`): nhãn
+phủ trọn [s, e] nhưng dữ liệu chỉ bị sửa ở một quãng ngắn đầu và một quãng ngắn
+cuối. Đây là mô phỏng cho kiểu tấn công phổ biến nhất trong ICS: kẻ tấn công đổi
+setpoint/lệnh điều khiển, vòng điều khiển *đáp ứng lại*, và sau giai đoạn quá độ
+nhà máy chạy ổn định ở điểm làm việc mới - quan hệ giữa các tín hiệu lúc đó trông
+lại bình thường. Nếu chỉ sinh loại tấn công "lệch liên tục", việc dò tham số sẽ
+kết luận sai rằng không cần ghép khe hở và đoạn dự đoán nên ngắn.
+
 Lưu ý: tấn công giả lập KHÔNG lan truyền qua động học của nhà máy như tấn công
 thật, nên con số eTaPR ở đây chỉ dùng để *so sánh tương đối* các bộ tham số hậu
 xử lý, không phải ước lượng điểm thi.
@@ -30,12 +38,14 @@ KINDS = ("freeze", "bias", "ramp", "setpoint", "scale", "replay", "noise")
 @dataclass
 class SynthConfig:
     rate_per_hour: float = 0.7          # số tấn công trên mỗi giờ dữ liệu
-    min_len: int = 60                   # giây
-    max_len: int = 1800                 # giây
+    min_len: int = 120                  # giây
+    max_len: int = 3600                 # giây
     min_gap: int = 300                  # khoảng cách tối thiểu giữa hai tấn công
     magnitude: tuple[float, float] = (0.3, 3.0)     # theo đơn vị "độ lệch chuẩn" của tín hiệu
     cluster_prob: float = 0.5           # xác suất tấn công cả cụm tín hiệu gần trùng
     min_effect: float = 0.01            # biên độ thay đổi tối thiểu (đơn vị min-max)
+    transient_prob: float = 0.5         # tỉ lệ tấn công kiểu "chỉ gãy ở hai đầu"
+    transient_len: tuple[int, int] = (30, 180)   # độ dài mỗi quá độ (giây)
     kinds: tuple[str, ...] = KINDS
     weights: tuple[float, ...] = (1.5, 1.5, 1.0, 1.5, 0.8, 1.0, 0.7)
     seed: int = 0
@@ -48,6 +58,7 @@ class SynthAttack:
     features: list[int]
     kind: str
     magnitude: float
+    transient: bool = False  # chỉ sửa dữ liệu ở hai đầu đoạn
 
 
 def _apply(
@@ -134,9 +145,15 @@ def inject(
         kind = str(rng.choice(cfg.kinds, p=weights))
         mag = float(rng.uniform(*cfg.magnitude))
 
-        sl = slice(start, end + 1)
+        transient = bool(rng.random() < cfg.transient_prob) and length > 400
         before = Xa[start : end + 1, feats].copy()
-        _apply(Xa, sl, feats, kind, mag, std, rng)
+        if transient:
+            # chỉ phá quan hệ ở quãng đầu và quãng cuối
+            for lo_, hi_ in ((start, start + int(rng.integers(*cfg.transient_len))),
+                             (end - int(rng.integers(*cfg.transient_len)), end + 1)):
+                _apply(Xa, slice(max(lo_, 0), min(hi_, len(Xa))), feats, kind, mag, std, rng)
+        else:
+            _apply(Xa, slice(start, end + 1), feats, kind, mag, std, rng)
         # Nếu phép tiêm gần như không làm dữ liệu thay đổi (ví dụ "đóng băng" một
         # tín hiệu vốn đã hằng số) thì đó là tấn công KHÔNG THỂ phát hiện; giữ lại
         # chỉ làm nhiễu việc chọn ngưỡng -> hoàn tác và bốc lại.
@@ -146,7 +163,8 @@ def inject(
             continue
 
         labels[start : end + 1] = 1
-        attacks.append(SynthAttack(start=start, end=end, features=list(feats), kind=kind, magnitude=mag))
+        attacks.append(SynthAttack(start=start, end=end, features=list(feats), kind=kind,
+                                   magnitude=mag, transient=transient))
 
     order = np.argsort([a.start for a in attacks])
     attacks = [attacks[i] for i in order]
@@ -158,8 +176,9 @@ def describe(attacks: Sequence[SynthAttack]) -> str:
     kinds: dict[str, int] = {}
     for a in attacks:
         kinds[a.kind] = kinds.get(a.kind, 0) + 1
+    n_tr = sum(1 for a in attacks if a.transient)
     return (
-        f"{len(attacks)} tấn công giả lập | độ dài: min {lens.min()}s, trung vị "
-        f"{int(np.median(lens))}s, max {lens.max()}s | kiểu: "
+        f"{len(attacks)} tấn công giả lập ({n_tr} kiểu quá độ hai đầu) | độ dài: min "
+        f"{lens.min()}s, trung vị {int(np.median(lens))}s, max {lens.max()}s | kiểu: "
         + ", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))
     )

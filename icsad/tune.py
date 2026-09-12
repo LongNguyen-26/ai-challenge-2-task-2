@@ -27,6 +27,8 @@ class PostParams:
     min_len: int = 30
     max_gap: int = 60
     max_len: int = 0
+    merge_alpha: float = 0.0
+    dilate_pad: int = 0
 
     def apply(self, score: np.ndarray) -> np.ndarray:
         return score_to_labels(
@@ -38,6 +40,8 @@ class PostParams:
             min_len=self.min_len,
             max_gap=self.max_gap,
             max_len=self.max_len,
+            merge_alpha=self.merge_alpha,
+            dilate_pad=self.dilate_pad,
         )
 
     def to_dict(self) -> dict:

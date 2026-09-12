@@ -92,6 +92,59 @@ def merge_gaps(labels: np.ndarray, max_gap: int) -> np.ndarray:
     return ranges_to_labels([(s, e) for s, e in merged], len(labels))
 
 
+def merge_adaptive(labels: np.ndarray, alpha: float = 0.5, max_iter: int = 20) -> np.ndarray:
+    """Ghép hai đoạn liền kề khi khe hở đủ nhỏ *so với chính hai đoạn đó*.
+
+    Vì sao cần: một tấn công đổi setpoint thường chỉ làm gãy quan hệ ở lúc bắt
+    đầu và lúc kết thúc, giữa đoạn nhà máy chạy ổn định ở điểm làm việc mới nên
+    trông như bình thường. Bộ dò vì thế cho ra *hai* đoạn ngắn kẹp lấy tấn công.
+    Ghép chúng lại thì phủ được gần như trọn tấn công (recall tăng mạnh).
+
+    Điều kiện an toàn: nếu khe hở G <= alpha * (I_trái + I_phải) với I là tổng độ
+    dài phần *thực sự được gắn cờ* (không tính khe hở đã bắc cầu trước đó), thì
+    ngay cả trong trường hợp xấu nhất - toàn bộ khe hở là dữ liệu bình thường -
+    đoạn ghép vẫn có tỉ lệ nằm trong tấn công >= 1/(1+2*alpha), tức >= 0.5 khi
+    alpha <= 0.5. Nói cách khác: ghép kiểu này không bao giờ khiến eTaPR loại
+    đoạn (theta_p = 0.5), trong khi ghép theo khe hở cố định thì có.
+    """
+    if alpha <= 0:
+        return labels
+    ranges = labels_to_ranges(labels)
+    if len(ranges) < 2:
+        return labels
+    segs = [[s, e, e - s + 1] for s, e in ranges]     # [đầu, cuối, tổng phần gắn cờ]
+    for _ in range(max_iter):
+        merged, changed = [segs[0]], False
+        for cur in segs[1:]:
+            prev = merged[-1]
+            gap = cur[0] - prev[1] - 1
+            if gap <= alpha * (prev[2] + cur[2]):
+                merged[-1] = [prev[0], cur[1], prev[2] + cur[2]]
+                changed = True
+            else:
+                merged.append(cur)
+        segs = merged
+        if not changed:
+            break
+    return ranges_to_labels([(s, e) for s, e, _ in segs], len(labels))
+
+
+def dilate(labels: np.ndarray, pad: int) -> np.ndarray:
+    """Nới mỗi đoạn ra `pad` giây về hai phía rồi gộp các đoạn chồng nhau.
+
+    Dùng khi tin rằng tấn công thật dài hơn phần mà bộ dò bắt được: eTaPR chỉ
+    tính "phát hiện" khi phủ >= 10% đoạn tấn công, nên một đoạn 2 phút nằm trong
+    một tấn công 30 phút sẽ bị bỏ qua hoàn toàn.
+    """
+    if pad <= 0:
+        return labels
+    n = len(labels)
+    out = np.zeros(n, dtype=np.int8)
+    for s_, e_ in labels_to_ranges(labels):
+        out[max(0, s_ - pad) : min(n, e_ + pad + 1)] = 1
+    return out
+
+
 def drop_short(labels: np.ndarray, min_len: int) -> np.ndarray:
     """Bỏ các đoạn ngắn hơn min_len (giảm báo động giả rời rạc)."""
     if min_len <= 1:
@@ -129,12 +182,16 @@ def score_to_labels(
     min_len: int = 1,
     max_gap: int = 0,
     max_len: int = 0,
+    merge_alpha: float = 0.0,
+    dilate_pad: int = 0,
 ) -> np.ndarray:
     """Toàn bộ chuỗi hậu xử lý, trả về nhãn int8 (n,)."""
     s = smooth(score, smooth_window, smooth_kind)
     labels = hysteresis(s, th_hi, th_hi if th_lo is None else th_lo)
     labels = merge_gaps(labels, max_gap)
     labels = drop_short(labels, min_len)
+    labels = merge_adaptive(labels, merge_alpha)
+    labels = dilate(labels, dilate_pad)
     if max_len:
         labels = cap_length(labels, s, max_len)
     return labels

@@ -1,0 +1,22 @@
+{
+  "models": [
+    "relation",
+    "tcn",
+    "nn"
+  ],
+  "norm": "rank",
+  "topk": 1,
+  "fuse": "feature_mean",
+  "target": 0.02,
+  "post": {
+    "smooth_window": 60,
+    "smooth_kind": "mean",
+    "th_hi": 4.999,
+    "th_lo_ratio": 1.0,
+    "min_len": 120,
+    "max_gap": 300,
+    "max_len": 0,
+    "merge_alpha": 0.0,
+    "dilate_pad": 0
+  }
+}

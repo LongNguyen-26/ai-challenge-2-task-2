@@ -17,7 +17,7 @@ from .scoring import aggregate, boundary_guard, normalize
 from .synth import SynthConfig, describe, inject
 from .utils import load_json, save_json
 
-FUSE_MODES = ("feature_mean", "feature_max", "score_mean", "score_max")
+FUSE_MODES = ("feature_mean", "feature_max", "score_mean", "score_max", "score_vote")
 
 
 @dataclass
@@ -74,7 +74,8 @@ def prepare_sets(
                 print(f"  [seed {seed}] {describe(attacks)}")
             meta = {"attacks": [{"start": a.start, "end": a.end, "kind": a.kind,
                                  "features": [scaler.kept_columns[f] for f in a.features],
-                                 "magnitude": round(a.magnitude, 3)} for a in attacks]}
+                                 "magnitude": round(a.magnitude, 3),
+                                 "transient": a.transient} for a in attacks]}
             if out_dir is not None:
                 np.save(Path(out_dir) / f"labels_synth_seed{seed}.npy", labels)
                 save_json(meta["attacks"], Path(out_dir) / f"attacks_synth_seed{seed}.json")
@@ -100,14 +101,26 @@ def build_score(
     topk: int = 3,
     guard: tuple[int, int] = (60, 300),
     fuse: str = "feature_mean",
+    feature_smooth: int = 0,
 ) -> np.ndarray:
     """Residual của một hay nhiều mô hình -> một chuỗi điểm bất thường.
 
-    Cách ghép nhiều mô hình (`fuse`):
-        feature_mean / feature_max : ghép ở mức *từng tín hiệu* rồi mới gộp top-k
-        score_mean   / score_max   : gộp top-k riêng từng mô hình rồi mới ghép
+    Args:
+        feature_smooth: làm trơn |residual| của *từng tín hiệu* trước khi chuẩn
+            hoá. Đây là điểm khác biệt quan trọng so với làm trơn chuỗi điểm
+            cuối: tấn công làm gãy quan hệ **liên tục** ở một vài tín hiệu, còn
+            nhiễu vận hành chỉ là những nhát nhọn ở các tín hiệu khác nhau. Làm
+            trơn trước khi gộp top-k sẽ chỉ giữ lại loại thứ nhất.
+        fuse: cách ghép nhiều mô hình -
+            feature_mean / feature_max : ghép ở mức *từng tín hiệu* rồi gộp top-k
+            score_mean   / score_max   : gộp top-k riêng từng mô hình rồi ghép
     """
-    zs = [normalize(np.load(Path(p)), mode=norm) for p in res_paths]
+    zs = []
+    for path in res_paths:
+        R = np.abs(np.load(Path(path)))
+        if feature_smooth > 1:
+            R = _smooth_columns(R, feature_smooth)
+        zs.append(normalize(R, mode=norm))
     if len(zs) == 1:
         score = aggregate(zs[0], topk=topk)
     elif fuse == "feature_mean":
@@ -118,6 +131,22 @@ def build_score(
         score = np.mean([aggregate(z, topk=topk) for z in zs], axis=0)
     elif fuse == "score_max":
         score = np.maximum.reduce([aggregate(z, topk=topk) for z in zs])
+    elif fuse == "score_vote":
+        # điểm thứ nhì trong các mô hình: chỉ cao khi >= 2 mô hình cùng báo động,
+        # nên một mô hình nhiễu riêng lẻ không kéo được điểm lên
+        parts = np.sort(np.stack([aggregate(z, topk=topk) for z in zs]), axis=0)
+        score = parts[-2] if len(zs) >= 2 else parts[-1]
     else:
         raise ValueError(f"fuse không hợp lệ: {fuse}")
     return boundary_guard(score.astype(np.float32), *guard)
+
+
+def _smooth_columns(a: np.ndarray, window: int) -> np.ndarray:
+    """Trung bình trượt có tâm theo từng cột (nhanh, dùng cumsum)."""
+    n = len(a)
+    half = window // 2
+    csum = np.concatenate([np.zeros((1, a.shape[1])), np.cumsum(a, axis=0, dtype=np.float64)])
+    lo = np.clip(np.arange(n) - half, 0, n)
+    hi = np.clip(np.arange(n) + (window - half), 0, n)
+    out = (csum[hi] - csum[lo]) / np.maximum(hi - lo, 1)[:, None]
+    return out.astype(np.float32)
