@@ -130,11 +130,25 @@ def load_training(data_dir: str | Path, names: Iterable[str] | None = None):
 
 
 def load_test(data_dir: str | Path, kind: str = "public_test", columns=None) -> tuple[Segment, list[str]]:
-    """Nạp một tập kiểm tra; trả về (Segment, columns)."""
+    """Nạp một tập kiểm tra; trả về (Segment, columns).
+
+    Đề bài nói mỗi gói kiểm tra chỉ có test.csv. Nếu vì lý do nào đó gói chứa
+    nhiều tệp, chúng được nối lại theo thứ tự tên tệp (và cảnh báo ra màn hình)
+    để pipeline vẫn chạy được.
+    """
     segs, cols = load_csv_set(find_source(data_dir, kind), columns=columns)
-    if len(segs) != 1:
-        raise ValueError(f"Kỳ vọng đúng 1 tệp test, nhận được {[s.name for s in segs]}")
-    return segs[0], cols
+    if len(segs) == 1:
+        return segs[0], cols
+
+    print(f"(!) {kind} có {len(segs)} tệp csv ({[s.name for s in segs]}), đang nối lại theo thứ tự tên")
+    merged = Segment(
+        name="+".join(s.name for s in segs),
+        values=np.concatenate([s.values for s in segs]),
+        timestamps=np.concatenate([s.timestamps for s in segs]),
+        row_id=(np.concatenate([s.row_id for s in segs]) if all(s.row_id is not None for s in segs) else None),
+        attack=(np.concatenate([s.attack for s in segs]) if all(s.attack is not None for s in segs) else None),
+    )
+    return merged, cols
 
 
 # --------------------------------------------------------------------------- #
@@ -189,6 +203,10 @@ class Scaler:
         vmin = np.asarray(self.vmin, dtype=np.float32)
         rng = np.asarray(self.vmax, dtype=np.float32) - vmin
         out = (values[:, self.keep] - vmin) / rng
+        n_bad = int((~np.isfinite(out)).sum())
+        if n_bad:
+            print(f"(!) {n_bad} giá trị thiếu/không hữu hạn -> thay bằng giữa dải train")
+            out = np.nan_to_num(out, nan=0.5, posinf=self.clip_hi, neginf=self.clip_lo)
         np.clip(out, self.clip_lo, self.clip_hi, out=out)
         return out.astype(np.float32, copy=False)
 
