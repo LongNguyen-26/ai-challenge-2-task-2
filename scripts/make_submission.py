@@ -21,16 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from icsad.data import load_test
 from icsad.etapr import labels_to_ranges
+from icsad.pipeline import build_score
 from icsad.postprocess import summarize
-from icsad.scoring import aggregate, boundary_guard, combine_scores, normalize
 from icsad.tune import PostParams
 from icsad.utils import load_json, stdout_utf8
-
-
-def build_score(res_files: list[Path], norm: str, topk: int, guard: tuple[int, int]) -> np.ndarray:
-    zs = [aggregate(normalize(np.load(f), mode=norm), topk=topk) for f in res_files]
-    s = combine_scores(zs) if len(zs) > 1 else zs[0]
-    return boundary_guard(s, *guard)
 
 
 def solve_threshold(score: np.ndarray, params: PostParams, target_ratio: float) -> float:
@@ -66,8 +60,10 @@ def main() -> None:
     params = PostParams(**cfg["post"])
     guard = (cfg.get("guard_zero", 60), cfg.get("guard_ramp", 300))
 
-    score = build_score([Path(p) for p in args.residuals], cfg["norm"], cfg["topk"], guard)
-    print(f"chuẩn hoá={cfg['norm']} topk={cfg['topk']} | điểm: trung vị={np.median(score):.2f} "
+    score = build_score([Path(p) for p in args.residuals], cfg["norm"], cfg["topk"], guard,
+                        cfg.get("fuse", "feature_mean"))
+    print(f"chuẩn hoá={cfg['norm']} topk={cfg['topk']} fuse={cfg.get('fuse', '-')} | "
+          f"điểm: trung vị={np.median(score):.2f} "
           f"p99={np.quantile(score, 0.99):.2f} max={score.max():.2f}")
 
     if args.target_ratio is not None:

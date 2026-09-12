@@ -13,8 +13,11 @@ from typing import Sequence
 import numpy as np
 
 from .data import Scaler, load_test, load_training
+from .scoring import aggregate, boundary_guard, normalize
 from .synth import SynthConfig, describe, inject
 from .utils import load_json, save_json
+
+FUSE_MODES = ("feature_mean", "feature_max", "score_mean", "score_max")
 
 
 @dataclass
@@ -89,3 +92,32 @@ def prepare_sets(
 
 def residual_path(out_dir: str | Path, model: str, tag: str) -> Path:
     return Path(out_dir) / f"res_{model}_{tag}.npy"
+
+
+def build_score(
+    res_paths: Sequence[str | Path],
+    norm: str = "rank",
+    topk: int = 3,
+    guard: tuple[int, int] = (60, 300),
+    fuse: str = "feature_mean",
+) -> np.ndarray:
+    """Residual của một hay nhiều mô hình -> một chuỗi điểm bất thường.
+
+    Cách ghép nhiều mô hình (`fuse`):
+        feature_mean / feature_max : ghép ở mức *từng tín hiệu* rồi mới gộp top-k
+        score_mean   / score_max   : gộp top-k riêng từng mô hình rồi mới ghép
+    """
+    zs = [normalize(np.load(Path(p)), mode=norm) for p in res_paths]
+    if len(zs) == 1:
+        score = aggregate(zs[0], topk=topk)
+    elif fuse == "feature_mean":
+        score = aggregate(np.mean(zs, axis=0), topk=topk)
+    elif fuse == "feature_max":
+        score = aggregate(np.maximum.reduce(zs), topk=topk)
+    elif fuse == "score_mean":
+        score = np.mean([aggregate(z, topk=topk) for z in zs], axis=0)
+    elif fuse == "score_max":
+        score = np.maximum.reduce([aggregate(z, topk=topk) for z in zs])
+    else:
+        raise ValueError(f"fuse không hợp lệ: {fuse}")
+    return boundary_guard(score.astype(np.float32), *guard)
