@@ -37,6 +37,7 @@ class RelationModel:
     ridge: float = 1e-3
     chunk: int = 20000
     pad: int = 4096
+    exclude_current: bool = False   # bỏ hết giá trị tức thời khỏi tập biến giải thích
 
     # tham số học được
     W: np.ndarray | None = None            # (F, D) trọng số
@@ -51,10 +52,19 @@ class RelationModel:
         return n_transforms(self.halflives)
 
     def _excluded_columns(self, target: int, F: int) -> np.ndarray:
-        """Các cột đặc trưng bị cấm dùng khi dự đoán tín hiệu `target`."""
+        """Các cột đặc trưng bị cấm dùng khi dự đoán tín hiệu `target`.
+
+        Luôn bỏ cả cụm tương quan cao của chính nó. Nếu `exclude_current` thì bỏ
+        luôn *giá trị tức thời của mọi tín hiệu*, chỉ còn bối cảnh EWMA: khi kẻ
+        tấn công đổi setpoint, các tín hiệu khác đáp ứng lại ngay trong vài giây
+        và "giải thích hộ" giá trị bị sửa - bỏ giá trị tức thời đi thì residual
+        còn lớn suốt thời gian tấn công chứ không chỉ ở lúc quá độ.
+        """
         T = self.n_transforms
         same_cluster = next((c for c in self.clusters if target in c), [target])
         cols = [f * T + k for f in same_cluster for k in range(T)]
+        if self.exclude_current:
+            cols += [f * T for f in range(F)]
         return np.asarray(sorted(set(cols)), dtype=np.int64)
 
     # ------------------------------------------------------------------ #
@@ -170,6 +180,7 @@ class RelationModel:
             W=self.W,
             b=self.b,
             halflives=np.asarray(self.halflives, dtype=np.float64),
+            exclude_current=np.array([int(self.exclude_current)]),
             ridge_per_target=self.ridge_per_target,
             train_residual_scale=self.train_residual_scale,
             clusters=np.array([",".join(map(str, c)) for c in self.clusters], dtype=object),
@@ -178,7 +189,8 @@ class RelationModel:
     @classmethod
     def load(cls, path: str | Path) -> "RelationModel":
         z = np.load(path, allow_pickle=True)
-        model = cls(halflives=tuple(float(x) for x in z["halflives"]))
+        model = cls(halflives=tuple(float(x) for x in z["halflives"]),
+                    exclude_current=bool(z["exclude_current"][0]) if "exclude_current" in z else False)
         model.W = z["W"]
         model.b = z["b"]
         model.ridge_per_target = z["ridge_per_target"]

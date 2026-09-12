@@ -34,6 +34,9 @@ def main() -> None:
     ap.add_argument("--cluster-threshold", type=float, default=0.995)
     ap.add_argument("--halflives", type=float, nargs="+", default=[20.0, 300.0])
     ap.add_argument("--chunk", type=int, default=20000)
+    ap.add_argument("--exclude-current", action="store_true",
+                    help="chỉ dùng bối cảnh EWMA, bỏ giá trị tức thời của mọi tín hiệu")
+    ap.add_argument("--name", default="relation", help="tên tệp mô hình (outputs/<name>.npz)")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -68,10 +71,11 @@ def main() -> None:
     print(f"train: {[n for n in arrays if n != holdout]} | kiểm định: {holdout}")
 
     with timed("huấn luyện mô hình quan hệ"):
-        model = RelationModel(halflives=tuple(args.halflives), chunk=args.chunk)
+        model = RelationModel(halflives=tuple(args.halflives), chunk=args.chunk,
+                              exclude_current=args.exclude_current)
         model.fit(train_arrays, clusters=clusters, val_arrays=val_arrays,
                   ridge_grid=DEFAULT_RIDGE_GRID)
-        model.save(out_dir / "relation.npz")
+        model.save(out_dir / f"{args.name}.npz")
 
     # residual trên tập kiểm định: tín hiệu nào khó dự đoán nhất?
     if val_arrays:
