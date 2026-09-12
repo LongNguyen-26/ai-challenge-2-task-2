@@ -1,0 +1,11 @@
+numpy>=1.26
+polars>=1.0
+pandas>=2.0
+scipy>=1.11
+scikit-learn>=1.4
+matplotlib>=3.8
+tqdm>=4.66
+# torch: cài riêng theo nền tảng
+#   CPU  : pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   CUDA : pip install torch --index-url https://download.pytorch.org/whl/cu126
+torch>=2.2
