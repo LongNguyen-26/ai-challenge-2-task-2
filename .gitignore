@@ -26,3 +26,4 @@ env/
 Thumbs.db
 .vscode/
 .idea/
+.subs_temp/

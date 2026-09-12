@@ -128,14 +128,20 @@ của tổ hợp 3 mô hình (quan hệ tuyến tính + TCN + k-NN).
 
 ```bash
 # tái tạo bản nộp tốt nhất cho public test
-python scripts/make_topn.py --dataset public_test --n 12 --max-len 180 --out predictions.csv
+python scripts/make_topn.py --dataset public_test --models relation tcn nn     --n 12 --max-len 180 --out predictions.csv
 
-# cho private test: đặt theo tỉ lệ để tự co giãn nếu tập dài/ngắn khác
-python scripts/score.py        --dataset private_test
-python scripts/score_tcn.py    --dataset private_test --device cuda
+# cho private test (chép private_test.zip vào release/ rồi chạy 4 lệnh này;
+# --rate đặt số đoạn theo mỗi 24 giờ nên tự co giãn nếu tập dài/ngắn khác public)
+python scripts/score.py          --dataset private_test
+python scripts/score_tcn.py      --dataset private_test --device cuda
 python scripts/score_neighbor.py --dataset private_test --device cuda
-python scripts/make_topn.py    --dataset private_test --rate 12 --max-len 180 --out predictions.csv
+python scripts/make_topn.py      --dataset private_test --models relation tcn nn     --rate 12 --max-len 180 --out predictions.csv
 ```
+
+Tham số chốt nằm ở `configs/best_recipe.json`. Tuỳ chọn `--exclude-switch` bỏ cụm công
+tắc chế độ P2 (`P2_MASW`, `P2_ManualGO`, `P2_AutoGO`, …) ra khỏi việc tính điểm: năm tín
+hiệu nhị phân này đổi cùng lúc mỗi khi người trực chuyển auto/manual, mô hình nào cũng
+coi là hiếm gặp nên hay báo động giả ở đó.
 
 ## 5. Cấu trúc mã nguồn
 

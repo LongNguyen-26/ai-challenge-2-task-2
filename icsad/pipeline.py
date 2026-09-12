@@ -102,10 +102,14 @@ def build_score(
     guard: tuple[int, int] = (60, 300),
     fuse: str = "feature_mean",
     feature_smooth: int = 0,
+    exclude: Sequence[int] | None = None,
 ) -> np.ndarray:
     """Residual của một hay nhiều mô hình -> một chuỗi điểm bất thường.
 
     Args:
+        exclude: chỉ số các tín hiệu bị loại khỏi việc tính điểm (ví dụ cụm công
+            tắc chế độ P2 - chúng đổi trạng thái khi người trực thao tác chứ
+            không phải khi bị tấn công, nên chỉ gây báo động giả).
         feature_smooth: làm trơn |residual| của *từng tín hiệu* trước khi chuẩn
             hoá. Đây là điểm khác biệt quan trọng so với làm trơn chuỗi điểm
             cuối: tấn công làm gãy quan hệ **liên tục** ở một vài tín hiệu, còn
@@ -120,7 +124,10 @@ def build_score(
         R = np.abs(np.load(Path(path)))
         if feature_smooth > 1:
             R = _smooth_columns(R, feature_smooth)
-        zs.append(normalize(R, mode=norm))
+        z = normalize(R, mode=norm)
+        if exclude:
+            z[:, list(exclude)] = 0.0
+        zs.append(z)
     if len(zs) == 1:
         score = aggregate(zs[0], topk=topk)
     elif fuse == "feature_mean":

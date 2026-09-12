@@ -113,10 +113,11 @@ dùng để chọn ngưỡng/hậu xử lý một cách có cơ sở thay vì ch
 cells.append(code("""
 DATASET = 'public_test'   # đổi thành 'private_test' khi có dữ liệu private
 
-!python scripts/score.py     --data-dir /content/data --dataset synth --seeds 0 1 2
-!python scripts/score.py     --data-dir /content/data --dataset $DATASET
-!python scripts/score_tcn.py --data-dir /content/data --dataset synth --seeds 0 1 2 --device cuda
-!python scripts/score_tcn.py --data-dir /content/data --dataset $DATASET --device cuda
+!python scripts/score.py          --data-dir /content/data --dataset synth --seeds 0 1 2
+!python scripts/score.py          --data-dir /content/data --dataset $DATASET
+!python scripts/score_tcn.py      --data-dir /content/data --dataset synth --seeds 0 1 2 --device cuda
+!python scripts/score_tcn.py      --data-dir /content/data --dataset $DATASET --device cuda
+!python scripts/score_neighbor.py --data-dir /content/data --dataset $DATASET --device cuda
 """))
 
 cells.append(md("""

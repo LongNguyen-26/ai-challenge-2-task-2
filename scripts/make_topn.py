@@ -28,6 +28,11 @@ from icsad.postprocess import cap_length, drop_short, merge_gaps, smooth, summar
 from icsad.scoring import normalize
 from icsad.utils import stdout_utf8
 
+# Cụm công tắc chế độ của tổ P2: 5 tín hiệu nhị phân luôn đổi cùng lúc khi người
+# trực chuyển auto/manual. Mô hình nào cũng coi đó là "hiếm gặp" nên hay báo động,
+# nhưng đó là thao tác vận hành bình thường.
+SWITCH_FEATURES = ("P2_MASW", "P2_MASW_Lamp", "P2_ManualGO", "P2_AutoGO", "P2_ATSW_Lamp")
+
 
 def main() -> None:
     stdout_utf8()
@@ -52,12 +57,16 @@ def main() -> None:
     ap.add_argument("--max-len", type=int, default=300, help="độ dài tối đa mỗi đoạn")
     ap.add_argument("--max-gap", type=int, default=120)
     ap.add_argument("--out", default="submissions/topn.csv")
+    ap.add_argument("--exclude-switch", action="store_true",
+                    help="bỏ cụm công tắc chế độ P2 khỏi việc tính điểm")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
     paths = [out_dir / f"res_{m}_{args.dataset}.npy" for m in args.models]
-    score = build_score(paths, args.norm, args.topk, (60, 300), args.fuse)
+    kept = Scaler.load(out_dir / "scaler.json").kept_columns
+    exclude = [kept.index(c) for c in SWITCH_FEATURES if c in kept] if args.exclude_switch else None
+    score = build_score(paths, args.norm, args.topk, (60, 300), args.fuse, exclude=exclude)
     s = smooth(score, args.smooth)
 
     # tách đoạn ứng viên ở ngưỡng thấp rồi xếp hạng theo đỉnh
@@ -104,7 +113,7 @@ def main() -> None:
     print(f"{out}: {info['n_segments']} đoạn, {info['ratio']:.2%} số điểm, "
           f"dài min {info['len_min']}s / TV {info['len_median']:.0f}s / max {info['len_max']}s")
     if not args.quiet:
-        names = Scaler.load(out_dir / "scaler.json").kept_columns
+        names = kept
         Z = np.mean([normalize(np.load(p), mode=args.norm) for p in paths], axis=0)
         hh = lambda i: f"{i // 3600:02d}:{(i % 3600) // 60:02d}:{i % 60:02d}"
         for a, b in labels_to_ranges(labels):

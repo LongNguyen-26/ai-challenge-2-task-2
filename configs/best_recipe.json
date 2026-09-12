@@ -1,0 +1,18 @@
+{
+  "models": [
+    "relation",
+    "tcn",
+    "nn"
+  ],
+  "norm": "rank",
+  "topk": 1,
+  "fuse": "feature_mean",
+  "smooth": 60,
+  "base_th": 3.5,
+  "max_gap": 120,
+  "min_len": 60,
+  "rate_per_day": 12,
+  "max_len": 180,
+  "public_score": 39.18,
+  "ghi_chu": "Rút ra từ 16 lần nộp thử: tấn công dài ~150-250s nên max_len 180; 12 đoạn/24h; dịch cửa sổ 60s mất 10-20 điểm nên giữ nguyên căn chỉnh theo cửa sổ tổng điểm lớn nhất (cap_length)."
+}
