@@ -54,14 +54,37 @@ class TCNConfig:
         return 1 + 2 * (self.kernel - 1) * sum(self.dilations)
 
 
+class ChannelNorm(nn.Module):
+    """LayerNorm trên trục kênh tại *từng thời điểm*.
+
+    Bắt buộc phải như vậy: GroupNorm/BatchNorm chuẩn hoá dọc theo trục thời gian
+    nên thống kê phụ thuộc độ dài chuỗi. Mạng huấn luyện với cửa sổ 512 nhưng khi
+    chấm điểm lại chạy trên cả chuỗi vài chục nghìn điểm -> thống kê khác hẳn,
+    residual phình to giả tạo (đo được: |residual| 0.074 khi chạy đúng độ dài
+    huấn luyện so với 0.196 khi chạy cả chuỗi). Chuẩn hoá theo kênh không dính
+    vấn đề này.
+    """
+
+    def __init__(self, ch: int, eps: float = 1e-5):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(1, ch, 1))
+        self.bias = nn.Parameter(torch.zeros(1, ch, 1))
+        self.eps = eps
+
+    def forward(self, x):
+        mu = x.mean(dim=1, keepdim=True)
+        var = x.var(dim=1, keepdim=True, unbiased=False)
+        return (x - mu) * torch.rsqrt(var + self.eps) * self.weight + self.bias
+
+
 class ResBlock(nn.Module):
     def __init__(self, ch: int, kernel: int, dilation: int, dropout: float = 0.0):
         super().__init__()
         pad = dilation * (kernel - 1) // 2      # 'same' padding, không nhân quả
         self.conv1 = nn.Conv1d(ch, ch, kernel, padding=pad, dilation=dilation)
-        self.norm1 = nn.GroupNorm(8, ch)
+        self.norm1 = ChannelNorm(ch)
         self.conv2 = nn.Conv1d(ch, ch, 1)
-        self.norm2 = nn.GroupNorm(8, ch)
+        self.norm2 = ChannelNorm(ch)
         self.act = nn.GELU()
         self.drop = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
