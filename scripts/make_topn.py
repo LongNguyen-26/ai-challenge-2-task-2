@@ -41,7 +41,13 @@ def main() -> None:
     ap.add_argument("--smooth", type=int, default=60)
     ap.add_argument("--base-th", type=float, default=3.5,
                     help="ngưỡng thấp để tách đoạn ứng viên (xếp hạng sau)")
-    ap.add_argument("--n", type=int, default=8, help="số đoạn giữ lại")
+    ap.add_argument("--n", type=int, default=0, help="số đoạn giữ lại (0 = tính theo --rate)")
+    ap.add_argument("--rate", type=float, default=12.0,
+                    help="số đoạn trên mỗi 24 giờ dữ liệu - dùng khi không đặt --n. "
+                         "Tập private có thể dài ngắn khác public nên đặt theo tỉ lệ sẽ an toàn hơn.")
+    ap.add_argument("--shift", type=int, default=0, help="dịch toàn bộ các đoạn (giây)")
+    ap.add_argument("--var-width", action="store_true",
+                    help="độ rộng mỗi đoạn tỉ lệ với bề rộng vùng ứng viên (vẫn bị chặn bởi --max-len)")
     ap.add_argument("--min-len", type=int, default=60)
     ap.add_argument("--max-len", type=int, default=300, help="độ dài tối đa mỗi đoạn")
     ap.add_argument("--max-gap", type=int, default=120)
@@ -60,10 +66,31 @@ def main() -> None:
     cand = drop_short(cand, args.min_len)
     ranges = labels_to_ranges(cand)
     peaks = [float(s[a : b + 1].max()) for a, b in ranges]
-    order = np.argsort(-np.asarray(peaks))[: args.n]
+    n_keep = args.n if args.n > 0 else max(1, int(round(args.rate * len(s) / 86400.0)))
+    order = np.argsort(-np.asarray(peaks))[:n_keep]
     chosen = sorted(ranges[i] for i in order)
 
-    labels = cap_length(ranges_to_labels(chosen, len(s)), s, args.max_len)
+    if args.var_width:
+        # mỗi đoạn giữ một nửa bề rộng vùng ứng viên của nó, trong khoảng [min_len, max_len]
+        trimmed = []
+        for a, b in chosen:
+            width = int(np.clip((b - a + 1) * 0.5, args.min_len, args.max_len))
+            seg = s[a : b + 1].astype(np.float64)
+            csum = np.concatenate(([0.0], np.cumsum(seg)))
+            if len(seg) > width:
+                best = int(np.argmax(csum[width:] - csum[:-width]))
+                trimmed.append((a + best, a + best + width - 1))
+            else:
+                trimmed.append((a, b))
+        labels = ranges_to_labels(trimmed, len(s))
+    else:
+        labels = cap_length(ranges_to_labels(chosen, len(s)), s, args.max_len)
+    if args.shift:
+        n_all = len(labels)
+        labels = ranges_to_labels(
+            [(max(0, a + args.shift), min(n_all - 1, b + args.shift)) for a, b in labels_to_ranges(labels)],
+            n_all,
+        )
     info = summarize(labels)
 
     out = Path(args.out)

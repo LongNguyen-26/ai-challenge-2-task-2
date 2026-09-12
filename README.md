@@ -96,7 +96,48 @@ Các đoạn mà mô hình chỉ ra trên public test đều bám vào những t
 > rơi xuống 0,13. Thay bằng `ChannelNorm` (chuẩn hoá trên trục kênh tại từng thời điểm, không
 > phụ thuộc độ dài chuỗi) thì hết.
 
-## 4. Cấu trúc mã nguồn
+## 4. Bảng xếp hạng public dạy được gì
+
+Tập test không có nhãn nên tấn công giả lập chỉ giúp tới một mức; sau đó điểm public
+trở thành nguồn thông tin duy nhất. Loạt phép thử có kiểm soát (mỗi lần chỉ đổi *một*
+yếu tố) cho kết quả:
+
+| Phép thử | Số đoạn | Độ rộng | % số điểm | Điểm |
+|---|---|---|---|---|
+| Ngưỡng + ghép khe hở (bản đầu) | 23 | ~130 s | 4,6% | 21,56 |
+| Đoạn dài | 18 | 630 s | 16,1% | **0,00** |
+| k-NN một mình | 11 | 451 s | 8,0% | 9,24 |
+| Ít mà chắc | 5 | 300 s | 1,7% | 30,76 |
+| Quét độ rộng (n=8) | 8 | 300 / 180 / 120 s | | 25,7 / **37,9** / 36,5 |
+| Quét số đoạn (rộng 180 s) | 8 / 12 / 16 | 180 s | | 37,9 / **39,2** / 31,9 |
+| Dịch cả 12 đoạn ±60 s | 12 | 180 s | 2,2% | −60 s: 28,8 · **0: 39,2** · +60 s: 19,2 |
+
+Ba kết luận:
+
+1. **Tấn công rất ngắn (cỡ 150–250 giây).** Đoạn dự đoán 630 s bị eTaPR loại sạch (điểm 0)
+   vì không đoạn nào đạt ngưỡng θp = 0,5 "nằm trong tấn công"; mà khi mọi đoạn dự đoán bị
+   loại thì các đoạn tấn công cũng mất luôn phần phủ → precision và recall **cùng** về 0.
+   Đây là cái bẫy lớn nhất của metric này.
+2. **Vị trí cửa sổ cực kỳ nhạy.** Dịch đúng 60 giây làm mất 10–20 điểm. Khớp parabol qua ba
+   điểm cho đỉnh ở −10 s, tức căn chỉnh hiện tại đã gần tối ưu.
+3. **Ít mà chắc thắng nhiều mà ẩu.** 5 đoạn (30,76) hơn hẳn 23 đoạn (21,56); tối ưu ở
+   khoảng 12 đoạn cho một ngày dữ liệu.
+
+Bộ tham số tốt nhất: **≈12 đoạn/24 giờ, mỗi đoạn 180 giây, đặt quanh đỉnh điểm bất thường**
+của tổ hợp 3 mô hình (quan hệ tuyến tính + TCN + k-NN).
+
+```bash
+# tái tạo bản nộp tốt nhất cho public test
+python scripts/make_topn.py --dataset public_test --n 12 --max-len 180 --out predictions.csv
+
+# cho private test: đặt theo tỉ lệ để tự co giãn nếu tập dài/ngắn khác
+python scripts/score.py        --dataset private_test
+python scripts/score_tcn.py    --dataset private_test --device cuda
+python scripts/score_neighbor.py --dataset private_test --device cuda
+python scripts/make_topn.py    --dataset private_test --rate 12 --max-len 180 --out predictions.csv
+```
+
+## 5. Cấu trúc mã nguồn
 
 ```
 icsad/                 thư viện
@@ -107,6 +148,8 @@ icsad/                 thư viện
   scoring.py           chuẩn hoá residual (mad/rank), gộp top-k, boundary guard
   postprocess.py       làm trơn, ngưỡng trễ, ghép khe hở, bỏ đoạn ngắn
   synth.py             sinh tấn công giả lập
+  novelty.py           k-láng-giềng tự tham chiếu ("trạng thái này đã từng xảy ra chưa")
+  changepoint.py       dò nhảy bậc và xung chữ nhật trên từng tín hiệu
   etapr.py             metric eTaPR (bản vector hoá)
   tune.py              duyệt lưới tham số hậu xử lý theo eTaPR
   pipeline.py          các bước dùng chung giữa các script
@@ -116,7 +159,10 @@ scripts/
   score.py             residual của mô hình tuyến tính
   score_tcn.py         residual của TCN
   tune_postprocess.py  chọn chuẩn hoá + ngưỡng + hậu xử lý
-  make_submission.py   xuất predictions.csv
+  score_neighbor.py    residual của mô hình k-láng-giềng
+  make_submission.py   xuất predictions.csv theo ngưỡng
+  make_topn.py         xuất N đoạn tin cậy nhất, cắt về độ rộng cố định (bản dùng thi)
+  make_peaks.py        đặt N cửa sổ quanh N đỉnh cao nhất
   run_all.py           chạy tuần tự toàn bộ
   plot_scores.py       vẽ điểm + liệt kê đoạn dự đoán kèm tín hiệu đóng góp
 configs/               tham số hậu xử lý đã chọn (dùng lại được, khỏi dò lại)
@@ -126,7 +172,7 @@ tools/build_notebook.py       sinh lại notebook từ mã nguồn
 tests/                 kiểm thử nhanh (eTaPR, hậu xử lý, dữ liệu)
 ```
 
-## 5. Chạy trên máy cá nhân
+## 6. Chạy trên máy cá nhân
 
 ```bash
 pip install -r requirements.txt
@@ -167,13 +213,13 @@ python scripts/score_tcn.py --dataset public_test --device cuda
 **Khi có `private_test.zip`**: chép vào `release/` rồi đổi `--dataset private_test` — không cần
 huấn luyện lại.
 
-## 6. Chạy trên Colab
+## 7. Chạy trên Colab
 
 Mở `notebooks/colab_train.ipynb` (Runtime → T4 GPU). Notebook tự mount Drive, dò `training.zip`
 trong Drive, clone repo này, huấn luyện cả hai mô hình, chọn ngưỡng và xuất `predictions.csv`
 về lại Drive.
 
-## 7. Ghi chú về dữ liệu
+## 8. Ghi chú về dữ liệu
 
 `release/*.zip` **không được đẩy lên GitHub** (xem `.gitignore`); dữ liệu nằm sẵn trong Google
 Drive. Mọi kết quả trung gian (`outputs/`, `data/`) cũng bị bỏ qua.
