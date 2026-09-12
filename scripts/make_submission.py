@@ -46,6 +46,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="public_test")
     ap.add_argument("--data-dir", default="release")
+    ap.add_argument("--out-dir", default="outputs", help="thư mục kết quả (chỉ dùng để tương thích)")
     ap.add_argument("--residuals", nargs="+", required=True)
     ap.add_argument("--params", default="outputs/post_params.json")
     ap.add_argument("--out", default="predictions.csv")

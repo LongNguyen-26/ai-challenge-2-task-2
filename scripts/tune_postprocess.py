@@ -35,8 +35,8 @@ def main() -> None:
     ap.add_argument("--labels", default="outputs/labels_synth_seed{seed}.npy")
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--norms", nargs="+", default=["mad", "rank"])
-    ap.add_argument("--topk", type=int, nargs="+", default=[1, 3, 5, 10])
-    ap.add_argument("--fuse", nargs="+", default=list(FUSE_MODES),
+    ap.add_argument("--topk", type=int, nargs="+", default=[1, 3, 5])
+    ap.add_argument("--fuse", nargs="+", default=["feature_mean", "feature_max"],
                     help="cách ghép nhiều mô hình (bỏ qua nếu chỉ có 1 residual)")
     ap.add_argument("--guard-zero", type=int, default=60)
     ap.add_argument("--guard-ramp", type=int, default=300)
